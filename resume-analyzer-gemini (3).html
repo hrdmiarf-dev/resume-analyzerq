@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HR Анализатор Резюме — Gemini</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@300;400;600;700&family=Manrope:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0a0f1e;
+    --surface: #111827;
+    --surface2: #1a2236;
+    --accent: #4ade80;
+    --accent2: #22d3ee;
+    --green: #4ade80;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --border: rgba(255,255,255,0.07);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Manrope', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(ellipse at 20% 20%, rgba(74,222,128,0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(34,211,238,0.04) 0%, transparent 50%);
+    animation: bgPulse 8s ease-in-out infinite alternate;
+    pointer-events: none; z-index: 0;
+  }
+
+  @keyframes bgPulse {
+    0% { transform: scale(1); }
+    100% { transform: scale(1.08); }
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+  header { padding: 36px 0 28px; border-bottom: 1px solid var(--border); }
+
+  .logo {
+    font-family: 'Unbounded', sans-serif;
+    font-size: 12px; font-weight: 600;
+    letter-spacing: 0.15em; color: var(--accent);
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+  }
+
+  .logo::before {
+    content: ''; width: 6px; height: 6px;
+    background: var(--accent); border-radius: 50%;
+    box-shadow: 0 0 10px var(--accent);
+    animation: blink 2s ease-in-out infinite;
+  }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  h1 {
+    font-family: 'Unbounded', sans-serif;
+    font-size: clamp(20px, 3.5vw, 34px);
+    font-weight: 700; line-height: 1.2; letter-spacing: -0.02em;
+  }
+
+  h1 span { color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 13px; margin-top: 8px; }
+
+  .gemini-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(74,222,128,0.08);
+    border: 1px solid rgba(74,222,128,0.2);
+    border-radius: 20px; padding: 4px 12px;
+    font-size: 11px; font-weight: 600; color: var(--accent);
+    margin-top: 10px; letter-spacing: 0.05em;
+  }
+
+  .main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 24px; padding: 28px 0;
+    align-items: start;
+  }
+
+  @media (max-width: 768px) { .main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px; padding: 22px;
+    position: sticky; top: 24px;
+  }
+
+  .panel-title {
+    font-family: 'Unbounded', sans-serif;
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .panel-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* API Key */
+  .api-info {
+    background: rgba(74,222,128,0.06);
+    border: 1px solid rgba(74,222,128,0.15);
+    border-radius: 10px; padding: 12px 14px;
+    font-size: 12px; color: #86efac; line-height: 1.6;
+    margin-bottom: 10px;
+  }
+
+  .api-info a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .api-info a:hover { text-decoration: underline; }
+
+  .input-field {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px; padding: 9px 12px;
+    outline: none; transition: border-color 0.2s;
+  }
+
+  .input-field:focus { border-color: rgba(74,222,128,0.4); }
+
+  textarea.input-field { resize: vertical; min-height: 68px; line-height: 1.5; }
+
+  /* Upload */
+  .upload-zone {
+    border: 2px dashed rgba(74,222,128,0.25);
+    border-radius: 12px; padding: 24px 14px;
+    text-align: center; cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative; overflow: hidden; margin-bottom: 14px;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(74,222,128,0.04);
+  }
+
+  .upload-zone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0;
+    cursor: pointer; width: 100%; height: 100%;
+  }
+
+  .upload-icon { font-size: 28px; margin-bottom: 8px; display: block; }
+  .upload-zone p { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .upload-zone strong { color: var(--accent); display: block; font-size: 13px; margin-bottom: 3px; }
+
+  .file-list {
+    display: flex; flex-direction: column; gap: 5px;
+    margin-bottom: 14px; max-height: 150px; overflow-y: auto;
+  }
+
+  .file-item {
+    background: var(--surface2); border-radius: 8px;
+    padding: 7px 11px; font-size: 12px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    animation: slideIn 0.2s ease;
+  }
+
+  @keyframes slideIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:translateX(0)} }
+
+  .file-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+
+  .file-status { font-size: 14px; flex-shrink: 0; }
+
+  .file-remove {
+    color: var(--muted); cursor: pointer; font-size: 16px;
+    line-height: 1; transition: color 0.2s;
+    background: none; border: none; padding: 0;
+  }
+  .file-remove:hover { color: var(--red); }
+
+  /* Filters */
+  .filter-section { margin-bottom: 18px; }
+
+  .filter-label {
+    font-size: 11px; font-weight: 600;
+    color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 8px; display: block;
+  }
+
+  select.input-field { appearance: none; }
+
+  .filter-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  .chip {
+    padding: 5px 11px; border-radius: 20px; font-size: 11px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--border);
+    color: var(--muted); background: transparent;
+    transition: all 0.2s ease; user-select: none;
+  }
+
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip.active { background: rgba(74,222,128,0.1); border-color: var(--accent); color: var(--accent); }
+
+  /* Buttons */
+  .btn {
+    width: 100%; padding: 12px; border-radius: 10px; border: none;
+    font-family: 'Unbounded', sans-serif; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.05em; cursor: pointer; transition: all 0.3s ease;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 6px;
+  }
+
+  .btn-primary { background: linear-gradient(135deg, var(--accent), #16a34a); color: #000; }
+  .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(74,222,128,0.25); }
+  .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .btn-secondary {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: 'Manrope', sans-serif;
+    font-weight: 600; font-size: 12px;
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Results */
+  .results-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+
+  .results-header {
+    padding: 18px 22px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+
+  .results-title {
+    font-family: 'Unbounded', sans-serif; font-size: 10px; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+  }
+
+  .results-count { font-size: 12px; color: var(--muted); background: var(--surface2); padding: 4px 10px; border-radius: 20px; }
+
+  .progress-bar { height: 3px; background: var(--surface2); overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.4s ease; width: 0%; }
+
+  .sort-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    font-size: 12px; color: var(--muted); flex-wrap: wrap;
+  }
+
+  .sort-btn {
+    padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 500;
+    cursor: pointer; border: 1px solid transparent;
+    background: transparent; color: var(--muted); transition: all 0.2s;
+  }
+  .sort-btn.active, .sort-btn:hover { background: var(--surface2); border-color: var(--border); color: var(--text); }
+
+  /* Empty state */
+  .empty-state { padding: 60px 24px; text-align: center; }
+  .empty-icon { font-size: 44px; margin-bottom: 14px; opacity: 0.35; display: block; }
+  .empty-state h3 { font-family: 'Unbounded', sans-serif; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+  .empty-state p { font-size: 12px; color: var(--muted); opacity: 0.7; line-height: 1.6; }
+
+  /* Cards */
+  .results-list { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+
+  .result-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+    transition: all 0.3s ease; animation: cardIn 0.4s ease both;
+    position: relative; overflow: hidden;
+  }
+
+  @keyframes cardIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+  .result-card:hover { border-color: rgba(74,222,128,0.2); transform: translateX(3px); }
+
+  .result-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; border-radius: 2px 0 0 2px;
+  }
+
+  .result-card.score-high::before { background: var(--green); }
+  .result-card.score-mid::before { background: var(--yellow); }
+  .result-card.score-low::before { background: var(--red); }
+
+  .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+
+  .candidate-name { font-family: 'Unbounded', sans-serif; font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.3; }
+  .candidate-file { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .score-badge { display: flex; flex-direction: column; align-items: center; min-width: 50px; }
+  .score-number { font-family: 'Unbounded', sans-serif; font-size: 20px; font-weight: 700; line-height: 1; }
+  .score-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+  .score-high .score-number { color: var(--green); }
+  .score-mid .score-number { color: var(--yellow); }
+  .score-low .score-number { color: var(--red); }
+
+  .card-summary { font-size: 12px; color: #94a3b8; line-height: 1.6; margin-bottom: 10px; }
+
+  .card-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+
+  .tag { font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 500; }
+  .tag-yes { background: rgba(74,222,128,0.1); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+  .tag-no { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.15); }
+  .tag-neutral { background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid var(--border); }
+
+  .card-meta { display: flex; gap: 14px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+
+  /* Processing */
+  .processing-item {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+
+  .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .processing-text { font-size: 12px; color: var(--muted); }
+  .processing-item.done { opacity: 0.5; }
+  .processing-item.done .spinner { border-top-color: var(--green); animation: none; }
+
+  .export-bar { padding: 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+  .export-bar .btn { width: auto; flex: 1; min-width: 130px; margin-top: 0; font-size: 11px; padding: 9px 14px; }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 3px; }
+
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 13px 16px; font-size: 13px;
+    z-index: 1000; transform: translateY(80px); opacity: 0;
+    transition: all 0.3s ease; max-width: 300px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: rgba(74,222,128,0.3); }
+  .toast.error { border-color: rgba(239,68,68,0.3); }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="logo">HR Система · Стоматология</div>
+    <h1>Анализатор <span>резюме</span></h1>
+    <p class="subtitle">Загрузите резюме ассистентов — ИИ оценит каждого кандидата по вашим критериям</p>
+    <div class="gemini-badge">✦ Powered by Google Gemini — Бесплатно</div>
+  </header>
+
+  <div class="main">
+    <!-- Left: settings -->
+    <div class="panel">
+
+      <div class="panel-title">API ключ Gemini</div>
+      <div class="api-info">
+        🆓 Gemini API бесплатен!<br>
+        Получите ключ на <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a><br>
+        → Войдите через Google → нажмите <strong>«Get API key»</strong>
+      </div>
+      <input type="password" class="input-field" id="apiKey" placeholder="AIzaSy..." style="margin-bottom:16px;" />
+
+      <div class="panel-title">Резюме (PDF)</div>
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept=".pdf" multiple />
+        <span class="upload-icon">📄</span>
+        <strong>Выберите PDF файлы</strong>
+        <p>или перетащите сюда<br>Можно загрузить сразу все резюме</p>
+      </div>
+
+      <div class="file-list" id="fileList"></div>
+
+      <div class="panel-title">Фильтры отбора</div>
+
+      <div class="filter-section">
+        <span class="filter-label">Минимальный опыт</span>
+        <select class="input-field" id="expFilter">
+          <option value="any" selected>Любой опыт</option>
+          <option value="0">Без опыта (студенты)</option>
+          <option value="1">От 1 года</option>
+          <option value="2">От 2 лет</option>
+          <option value="3">От 3 лет</option>
+        </select>
+      </div>
+
+      <div class="filter-section">
+        <span class="filter-label">Обязательные навыки</span>
+        <div class="filter-chips">
+          <div class="chip active" data-skill="Ассистирование врачу">🦷 Ассистирование врачу</div>
+          <div class="chip active" data-skill="Медицинское образование">🎓 Мед. образование</div>
+          <div class="chip active" data-skill="Аккредитация по сестринскому делу">🏥 Аккредитация сестринское дело</div>
+          <div class="chip active" data-skill="Аккредитация гигиениста стоматологического">🦷 Аккредитация гигиениста</div>
+        </div>
+      </div>
+
+      <div class="filter-section">
+        <span class="filter-label">Дополнительные требования</span>
+        <textarea class="input-field" id="extraFilters" placeholder="Например: знание английского, сменный график, санитарная книжка..."></textarea>
+      </div>
+
+      <button class="btn btn-primary" id="analyzeBtn" disabled>
+        ⚡ Анализировать резюме
+      </button>
+    </div>
+
+    <!-- Right: results -->
+    <div class="results-panel">
+      <div class="results-header">
+        <span class="results-title">Результаты анализа</span>
+        <span class="results-count" id="resultsCount">0 кандидатов</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+
+      <div id="sortBar" class="sort-bar" style="display:none;">
+        Сортировка:
+        <button class="sort-btn active" data-sort="score">По оценке</button>
+        <button class="sort-btn" data-sort="name">По имени</button>
+        <button class="sort-btn" data-sort="exp">По опыту</button>
+      </div>
+
+      <div id="resultsContainer">
+        <div class="empty-state">
+          <span class="empty-icon">🔍</span>
+          <h3>Резюме ещё не загружены</h3>
+          <p>Загрузите PDF-файлы слева,<br>выберите фильтры и нажмите «Анализировать»</p>
+        </div>
+      </div>
+
+      <div id="exportBar" class="export-bar" style="display:none;">
+        <button class="btn btn-secondary" onclick="exportText()">📋 Скопировать текст</button>
+        <button class="btn btn-secondary" onclick="exportCSV()">📊 Скачать CSV</button>
+        <button class="btn btn-primary" style="background:linear-gradient(135deg,#229ED9,#1a7ab5);color:#fff;min-width:100%;" onclick="sendToTelegram()">✈️ Отправить рекомендованных в Telegram</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let files = [];
+  let results = [];
+  let sortMode = 'score';
+  let isAnalyzing = false;
+
+  const fileInput = document.getElementById('fileInput');
+  const fileList = document.getElementById('fileList');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const resultsContainer = document.getElementById('resultsContainer');
+  const resultsCount = document.getElementById('resultsCount');
+  const progressFill = document.getElementById('progressFill');
+  const uploadZone = document.getElementById('uploadZone');
+
+  fileInput.addEventListener('change', e => addFiles(Array.from(e.target.files)));
+
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault(); uploadZone.classList.remove('drag-over');
+    addFiles(Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf'));
+  });
+
+  function addFiles(newFiles) {
+    newFiles.forEach(f => { if (!files.find(x => x.name === f.name)) files.push(f); });
+    renderFileList(); updateBtn();
+  }
+
+  function removeFile(name) {
+    files = files.filter(f => f.name !== name);
+    renderFileList(); updateBtn();
+  }
+
+  function renderFileList() {
+    fileList.innerHTML = files.map(f => `
+      <div class="file-item">
+        <span style="font-size:13px;">📄</span>
+        <span class="file-name">${f.name}</span>
+        <button class="file-remove" onclick="removeFile('${f.name.replace(/'/g,"\\'")}')">×</button>
+      </div>
+    `).join('');
+  }
+
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => chip.classList.toggle('active'));
+  });
+
+  document.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active'); sortMode = btn.dataset.sort; renderResults();
+    });
+  });
+
+  function updateBtn() {
+    const hasKey = document.getElementById('apiKey').value.trim().length > 10;
+    analyzeBtn.disabled = files.length === 0 || !hasKey || isAnalyzing;
+  }
+
+  document.getElementById('apiKey').addEventListener('input', updateBtn);
+
+  function fileToBase64(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result.split(',')[1]);
+      r.onerror = () => rej(new Error('Ошибка чтения файла'));
+      r.readAsDataURL(file);
+    });
+  }
+
+  function buildPrompt() {
+    const exp = document.getElementById('expFilter').value;
+    const skills = Array.from(document.querySelectorAll('.chip.active')).map(c => c.dataset.skill);
+    const extra = document.getElementById('extraFilters').value.trim();
+
+    let criteria = [];
+    if (exp !== 'any') criteria.push(`Минимальный опыт: ${exp === '0' ? 'без опыта' : exp + ' год(а)'}`);
+    if (skills.length) criteria.push(`Обязательные навыки: ${skills.join(', ')}`);
+    if (extra) criteria.push(`Дополнительно: ${extra}`);
+
+    return `Ты — опытный HR-специалист стоматологической клиники. Проанализируй резюме ассистента стоматолога.
+
+${criteria.length ? `КРИТЕРИИ ОТБОРА:\n${criteria.map(c => `- ${c}`).join('\n')}` : 'Оцени общую пригодность кандидата на должность ассистента стоматолога.'}
+
+Верни ТОЛЬКО JSON без пояснений и без markdown-блоков, строго в таком формате:
+{"name":"Имя Фамилия или Не указано","score":75,"experience_years":2,"education":"краткое образование","summary":"2-3 предложения о кандидате","skills_found":["навык1"],"skills_missing":["навык2"],"recommendation":"РЕКОМЕНДУЕТСЯ"}
+
+Значение recommendation: РЕКОМЕНДУЕТСЯ, ВОЗМОЖНО или НЕ РЕКОМЕНДУЕТСЯ`;
+  }
+
+  async function analyzeResume(file, apiKey, prompt, attempt = 1) {
+    const base64 = await fileToBase64(file);
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: 'application/pdf', data: base64 } },
+              { text: prompt }
+            ]
+          }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 1024 }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const err = await response.json();
+      const msg = err.error?.message || `HTTP ${response.status}`;
+
+      // If rate limit error — wait and retry up to 3 times
+      if (response.status === 429 && attempt <= 3) {
+        const waitSec = attempt * 15;
+        showToast(`⏳ Лимит API. Повтор через ${waitSec} сек... (попытка ${attempt}/3)`, '');
+        await new Promise(r => setTimeout(r, waitSec * 1000));
+        return analyzeResume(file, apiKey, prompt, attempt + 1);
+      }
+
+      throw new Error(msg);
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const clean = text.replace(/```json|```/g, '').trim();
+    return { ...JSON.parse(clean), file: file.name };
+  }
+
+  analyzeBtn.addEventListener('click', async () => {
+    const apiKey = document.getElementById('apiKey').value.trim();
+    if (!apiKey || files.length === 0) return;
+
+    isAnalyzing = true; results = [];
+    analyzeBtn.disabled = true;
+    document.getElementById('sortBar').style.display = 'none';
+    document.getElementById('exportBar').style.display = 'none';
+    progressFill.style.width = '0%';
+
+    const prompt = buildPrompt();
+
+    // Show processing list
+    resultsContainer.innerHTML = `<div style="padding:14px;display:flex;flex-direction:column;gap:8px;">${
+      files.map((f, i) => `
+        <div class="processing-item" id="proc-${i}">
+          <div class="spinner"></div>
+          <span class="processing-text">Ожидание: ${f.name}</span>
+        </div>
+      `).join('')
+    }</div>`;
+
+    let done = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      const procEl = document.getElementById(`proc-${i}`);
+      if (procEl) {
+        procEl.querySelector('.processing-text').textContent = `Анализирую: ${files[i].name}`;
+      }
+
+      try {
+        const result = await analyzeResume(files[i], apiKey, prompt);
+        results.push(result);
+        if (procEl) { procEl.classList.add('done'); procEl.querySelector('.processing-text').textContent = `✓ ${files[i].name}`; }
+      } catch (err) {
+        console.error(files[i].name, err);
+        results.push({
+          name: files[i].name, score: 0, file: files[i].name,
+          summary: `Ошибка анализа: ${err.message}`,
+          skills_found: [], skills_missing: [],
+          recommendation: 'НЕ РЕКОМЕНДУЕТСЯ', experience_years: 0, education: '—'
+        });
+        if (procEl) { procEl.classList.add('done'); procEl.querySelector('.processing-text').textContent = `⚠ Ошибка: ${files[i].name}`; }
+      }
+
+      done++;
+      progressFill.style.width = `${(done / files.length) * 100}%`;
+      resultsCount.textContent = `${done} / ${files.length}`;
+
+      // Delay to avoid rate limiting (Gemini free tier: 15 req/min)
+      if (i < files.length - 1) await new Promise(r => setTimeout(r, 5000));
+    }
+
+    isAnalyzing = false; updateBtn();
+    document.getElementById('sortBar').style.display = 'flex';
+    document.getElementById('exportBar').style.display = 'flex';
+    resultsCount.textContent = `${results.length} кандидатов`;
+    renderResults();
+    showToast(`✅ Готово! Проанализировано ${results.length} резюме`, 'success');
+  });
+
+  function sortResults(arr) {
+    const copy = [...arr];
+    if (sortMode === 'score') return copy.sort((a, b) => b.score - a.score);
+    if (sortMode === 'name') return copy.sort((a, b) => (a.name||'').localeCompare(b.name||''));
+    if (sortMode === 'exp') return copy.sort((a, b) => (b.experience_years||0) - (a.experience_years||0));
+    return copy;
+  }
+
+  function getScoreClass(s) {
+    if (s >= 70) return 'score-high';
+    if (s >= 40) return 'score-mid';
+    return 'score-low';
+  }
+
+  function getRecBadge(rec) {
+    if (!rec) return '';
+    if (rec.includes('НЕ')) return '<span class="tag tag-no">✕ Не рекомендуется</span>';
+    if (rec.includes('ВОЗМОЖНО')) return '<span class="tag tag-neutral">~ Возможно</span>';
+    return '<span class="tag tag-yes">✓ Рекомендуется</span>';
+  }
+
+  function renderResults() {
+    if (results.length === 0) return;
+    const sorted = sortResults(results);
+    resultsContainer.innerHTML = `<div class="results-list">${sorted.map((r, idx) => {
+      const sc = getScoreClass(r.score);
+      const skillTags = (r.skills_found||[]).slice(0,4).map(s => `<span class="tag tag-yes">${s}</span>`).join('');
+      const missingTags = (r.skills_missing||[]).slice(0,2).map(s => `<span class="tag tag-no">✕ ${s}</span>`).join('');
+      return `
+        <div class="result-card ${sc}" style="animation-delay:${idx*0.04}s">
+          <div class="card-top">
+            <div>
+              <div class="candidate-name">${r.name || 'Имя не определено'}</div>
+              <div class="candidate-file">📄 ${r.file}</div>
+            </div>
+            <div class="score-badge">
+              <div class="score-number">${r.score}</div>
+              <div class="score-label">баллов</div>
+            </div>
+          </div>
+          <p class="card-summary">${r.summary || ''}</p>
+          <div class="card-tags">
+            ${getRecBadge(r.recommendation)}
+            ${skillTags}
+            ${missingTags}
+          </div>
+          <div class="card-meta">
+            <span>🕐 Опыт: ${r.experience_years ? r.experience_years + ' лет' : 'нет'}</span>
+            ${r.education && r.education !== '—' ? `<span>🎓 ${r.education}</span>` : ''}
+          </div>
+        </div>`;
+    }).join('')}</div>`;
+  }
+
+  function exportText() {
+    const sorted = sortResults(results);
+    const text = `🦷 ОТБОР АССИСТЕНТОВ СТОМАТОЛОГА\n📊 Проверено резюме: ${results.length}\n${'─'.repeat(30)}\n\n`
+      + sorted.map((r, i) => {
+          const icon = r.recommendation?.includes('НЕ') ? '❌' : r.recommendation?.includes('ВОЗМОЖНО') ? '⚠️' : '✅';
+          return `${i+1}. ${icon} ${r.name}\n   Оценка: ${r.score}/100 | Опыт: ${r.experience_years||0} лет\n   ${r.summary}`;
+        }).join('\n\n');
+    navigator.clipboard.writeText(text).then(() => showToast('✅ Скопировано! Вставьте в Telegram', 'success'));
+  }
+
+  function exportCSV() {
+    const sorted = sortResults(results);
+    const rows = [['Имя','Оценка','Опыт (лет)','Образование','Рекомендация','Файл','Комментарий']];
+    sorted.forEach(r => rows.push([r.name, r.score, r.experience_years||0, r.education||'', r.recommendation||'', r.file, (r.summary||'').replace(/,/g,';')]));
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob(['\uFEFF'+csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'резюме_анализ.csv'; a.click();
+  }
+
+  async function sendToTelegram() {
+    const BOT_TOKEN = '8769557819:AAGxxRs52KXImat3nh-n0yigtXn7hOmgnS8';
+    const CHAT_ID = '780658381';
+
+    const recommended = sortResults(results).filter(r =>
+      r.recommendation && !r.recommendation.includes('НЕ')
+    );
+
+    if (recommended.length === 0) {
+      showToast('⚠️ Нет рекомендованных кандидатов', 'error');
+      return;
+    }
+
+    const btn = document.querySelector('[onclick="sendToTelegram()"]');
+    btn.disabled = true;
+    btn.textContent = '⏳ Отправляю...';
+
+    // Header message
+    const header = `🦷 *ОТБОР АССИСТЕНТОВ СТОМАТОЛОГА*\n📊 Проверено резюме: ${results.length} | ✅ Рекомендовано: ${recommended.length}\n${'─'.repeat(28)}`;
+
+    try {
+      // Send header
+      await sendTgMessage(BOT_TOKEN, CHAT_ID, header);
+
+      // Send each recommended candidate
+      for (const r of recommended) {
+        const icon = r.recommendation?.includes('ВОЗМОЖНО') ? '⚠️' : '✅';
+        const skills = (r.skills_found||[]).slice(0,4).join(', ') || '—';
+        const missing = (r.skills_missing||[]).slice(0,2).join(', ');
+
+        const msg = `${icon} *${r.name}*\n⭐ Оценка: *${r.score}/100*\n🕐 Опыт: ${r.experience_years || 0} лет\n🎓 ${r.education || '—'}\n\n💬 ${r.summary}\n\n✔️ Навыки: ${skills}${missing ? '\n❌ Отсутствует: ' + missing : ''}\n📄 Файл: ${r.file}`;
+
+        await sendTgMessage(BOT_TOKEN, CHAT_ID, msg);
+        await new Promise(res => setTimeout(res, 300));
+      }
+
+      btn.textContent = '✅ Отправлено!';
+      showToast(`✅ ${recommended.length} кандидатов отправлено в Telegram!`, 'success');
+      setTimeout(() => { btn.disabled = false; btn.textContent = '✈️ Отправить рекомендованных в Telegram'; }, 3000);
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = '✈️ Отправить рекомендованных в Telegram';
+      showToast('❌ Ошибка отправки: ' + err.message, 'error');
+    }
+  }
+
+  async function sendTgMessage(token, chatId, text) {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.description || 'Telegram error');
+    }
+  }
+
+  function showToast(msg, type = '') {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = `toast ${type} show`;
+    setTimeout(() => t.classList.remove('show'), 4000);
+  }
+</script>
+</body>
+</html>
